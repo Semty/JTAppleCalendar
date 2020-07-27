@@ -224,7 +224,7 @@ class JTACMonthLayout: UICollectionViewLayout, JTACMonthLayoutProtocol {
         outterLoop: for sectionIndex in startSectionIndex..<cellCache.count {
             if let validSection = cellCache[sectionIndex], !validSection.isEmpty {
                 if thereAreDecorationViews {
-                    guard let attrib = layoutAttributesForDecorationView(ofKind: decorationViewID, at: IndexPath(item: 0, section: sectionIndex)) else { return nil }
+                    let attrib = layoutAttributesForDecorationView(ofKind: decorationViewID, at: IndexPath(item: 0, section: sectionIndex))!
                     attributes.append(attrib)
                 }
                 
