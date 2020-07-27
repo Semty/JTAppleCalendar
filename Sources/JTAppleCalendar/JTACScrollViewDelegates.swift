@@ -96,10 +96,10 @@ extension JTACMonthView: UIScrollViewDelegate {
                                                      fixed: { return theCurrentSection})
 
             guard section >= 0, section < calendarLayout.endOfSectionOffsets.count else {setTargetContentOffset(0); return}
-            let endOfCurrentSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection]
-            let endOfPreviousSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection - 1 < 0 ? 0 : theCurrentSection - 1]
+            let endOfCurrentSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection] + customInterval
+            let endOfPreviousSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection - 1 < 0 ? 0 : theCurrentSection - 1] + customInterval
             let midPoint = (endOfCurrentSectionOffset + endOfPreviousSectionOffset) / 2
-            let maxSnap = calendarLayout.endOfSectionOffsets[section]
+            let maxSnap = calendarLayout.endOfSectionOffsets[section] + customInterval
             
             let userPercentage: CGFloat = 20
             let modifiedPercentage = CGFloat((100 - userPercentage) / 100.0)
@@ -110,14 +110,14 @@ extension JTACMonthView: UIScrollViewDelegate {
                            previousScrollDirectionValue: lastMovedScrollDirection,
                            forward: {
                                 if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
-                                    setTargetContentOffset(endOfCurrentSectionOffset + customInterval)
+                                    setTargetContentOffset(endOfCurrentSectionOffset)
                                 } else {
                                     setTargetContentOffset(endOfPreviousSectionOffset)
                                 }
                            },
                            backward: {
                                 if theCurrentContentOffset <= snapForward || directionVelocity < 0 {
-                                    setTargetContentOffset(endOfPreviousSectionOffset + customInterval)
+                                    setTargetContentOffset(endOfPreviousSectionOffset)
                                 } else {
                                     setTargetContentOffset(endOfCurrentSectionOffset)
                                 }
