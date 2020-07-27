@@ -88,7 +88,7 @@ extension JTACMonthView: UIScrollViewDelegate {
                                                     forward: { return ceil(theCurrentContentOffset / interval) * interval },
                                                     backward: { return floor(theCurrentContentOffset / interval) * interval})
             setTargetContentOffset(offset)
-        case .stopAtEachSection:
+        case .stopAtEachSection(let customInterval):
             let section = scrollDecision(currentScrollDirectionValue: translation,
                                                      previousScrollDirectionValue: lastMovedScrollDirection,
                                                      forward: { return theCurrentSection},
@@ -110,16 +110,16 @@ extension JTACMonthView: UIScrollViewDelegate {
                            previousScrollDirectionValue: lastMovedScrollDirection,
                            forward: {
                                 if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
-                                    setTargetContentOffset(endOfCurrentSectionOffset)
+                                    setTargetContentOffset(endOfCurrentSectionOffset + customInterval)
                                 } else {
-                                    setTargetContentOffset(endOfPreviousSectionOffset)
+                                    setTargetContentOffset(endOfPreviousSectionOffset + customInterval)
                                 }
                            },
                            backward: {
                                 if theCurrentContentOffset <= snapForward || directionVelocity < 0 {
-                                    setTargetContentOffset(endOfPreviousSectionOffset)
+                                    setTargetContentOffset(endOfPreviousSectionOffset + customInterval)
                                 } else {
-                                    setTargetContentOffset(endOfCurrentSectionOffset)
+                                    setTargetContentOffset(endOfCurrentSectionOffset + customInterval)
                                 }
                            })
         case let .nonStopToCell(withResistance: resistance), let .nonStopToSection(withResistance: resistance):
