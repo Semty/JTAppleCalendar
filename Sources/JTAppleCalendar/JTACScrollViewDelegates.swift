@@ -112,14 +112,14 @@ extension JTACMonthView: UIScrollViewDelegate {
                                 if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
                                     setTargetContentOffset(endOfCurrentSectionOffset + customInterval)
                                 } else {
-                                    setTargetContentOffset(endOfPreviousSectionOffset + customInterval)
+                                    setTargetContentOffset(endOfPreviousSectionOffset)
                                 }
                            },
                            backward: {
                                 if theCurrentContentOffset <= snapForward || directionVelocity < 0 {
                                     setTargetContentOffset(endOfPreviousSectionOffset + customInterval)
                                 } else {
-                                    setTargetContentOffset(endOfCurrentSectionOffset + customInterval)
+                                    setTargetContentOffset(endOfCurrentSectionOffset)
                                 }
                            })
         case let .nonStopToCell(withResistance: resistance), let .nonStopToSection(withResistance: resistance):
