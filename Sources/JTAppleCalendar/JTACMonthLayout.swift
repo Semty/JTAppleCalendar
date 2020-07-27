@@ -311,6 +311,15 @@ class JTACMonthLayout: UICollectionViewLayout, JTACMonthLayoutProtocol {
         return endOfSection - startOfSection
     }
     
+    func frameOfVerticalSection(_ section: Int) -> CGRect {
+        let endOfSection = endOfSectionOffsets[section].rounded()
+        let sectionSize = trueSizeOfContentForSection(section)
+        return CGRect(x: sectionInset.left,
+                      y: endOfSection - sectionSize.height,
+                      width: sectionSize.width,
+                      height: sectionSize.height)
+    }
+    
     func cellAttributeFor(_ item: Int, section: Int) -> UICollectionViewLayoutAttributes? {
         guard let cachedValue = cachedValue(for: item, section: section) else { return nil }
         let attrib = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: item, section: section))
@@ -487,6 +496,12 @@ class JTACMonthLayout: UICollectionViewLayout, JTACMonthLayoutProtocol {
             return cellCache[section]![0].height * CGFloat(numberOfRowsForMonth(section)) + headerSizeOfSection
             
         }
+    }
+    
+    func trueSizeOfContentForSection(_ section: Int) -> CGSize {
+        let headerSizeOfSection = !headerCache.isEmpty ? headerCache[section]!.height : 0
+        return CGSize(width: cellCache[section]![0].width * CGFloat(maxNumberOfDaysInWeek),
+                      height: cellCache[section]![0].height * CGFloat(numberOfRowsForMonth(section)) + headerSizeOfSection)
     }
     
     func sectionFromOffset(_ theOffSet: CGFloat) -> Int {

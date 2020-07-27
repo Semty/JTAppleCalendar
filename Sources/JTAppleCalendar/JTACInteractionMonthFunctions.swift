@@ -107,6 +107,10 @@ extension JTACMonthView {
         return monthInfo[monthIndex]
     }
     
+    public func frameOfVerticalSection(_ section: Int) -> CGRect {
+        return calendarViewLayout.frameOfVerticalSection(section)
+    }
+    
     /// Returns the cell status for a given point
     /// - Parameter: point of the cell you want to find
     /// - returns:
