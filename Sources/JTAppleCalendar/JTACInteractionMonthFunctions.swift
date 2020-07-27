@@ -108,7 +108,7 @@ extension JTACMonthView {
     }
     
     public func frameOfVerticalSection(_ section: Int) -> CGRect {
-        if calendarLayoutIsLoaded {
+        if functionIsUnsafeSafeToRun {
             return calendarViewLayout.frameOfVerticalSection(section)
         } else {
             return .zero
