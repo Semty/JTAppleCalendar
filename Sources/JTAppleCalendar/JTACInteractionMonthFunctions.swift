@@ -46,6 +46,14 @@ extension JTACMonthView {
         return nil
     }
     
+    public func cellStatusFor(indexPath: IndexPath) -> CellState? {
+        if let date = dateOwnerInfoFromPath(indexPath) {
+            let stateOfCell = cellStateFromIndexPath(indexPath, withDateInfo: date)
+            return stateOfCell
+        }
+        return nil
+    }
+    
     /// Returns the cell status for a given date
     /// - Parameter: date Date of the cell you want to find
     /// - returns:
