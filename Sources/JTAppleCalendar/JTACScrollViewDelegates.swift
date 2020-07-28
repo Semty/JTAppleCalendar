@@ -109,23 +109,28 @@ extension JTACMonthView: UIScrollViewDelegate {
             scrollDecision(currentScrollDirectionValue: translation,
                            previousScrollDirectionValue: lastMovedScrollDirection,
                            forward: {
-                                if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
-                                    decelerationRate = .fast
-                                    setTargetContentOffset(endOfCurrentSectionOffset)
+                            if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
+                                decelerationRate = .fast
+                                if theCurrentContentOffset > endOfCurrentSectionOffset, calendarLayout.endOfSectionOffsets.count > theCurrentSection + 1 {
+                                    let endOfNextSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection + 1]
+                                    setTargetContentOffset(endOfNextSectionOffset + customInterval)
                                 } else {
-                                    decelerationRate = .normal
-                                    setTargetContentOffset(endOfPreviousSectionOffset)
+                                    setTargetContentOffset(endOfCurrentSectionOffset)
                                 }
-                           },
+                            } else {
+                                decelerationRate = .normal
+                                setTargetContentOffset(endOfPreviousSectionOffset)
+                            }
+            },
                            backward: {
-                                if theCurrentContentOffset <= snapForward || directionVelocity < 0 {
-                                    decelerationRate = .fast
-                                    setTargetContentOffset(endOfPreviousSectionOffset)
-                                } else {
-                                    decelerationRate = .normal
-                                    setTargetContentOffset(endOfCurrentSectionOffset)
-                                }
-                           })
+                            if theCurrentContentOffset <= snapForward || directionVelocity < 0 {
+                                decelerationRate = .fast
+                                setTargetContentOffset(endOfPreviousSectionOffset)
+                            } else {
+                                decelerationRate = .normal
+                                setTargetContentOffset(endOfCurrentSectionOffset)
+                            }
+            })
         case let .nonStopToCell(withResistance: resistance), let .nonStopToSection(withResistance: resistance):
             
             let (recalculatedOffset, elementProperties) = rectAfterApplying(resistance: resistance,
