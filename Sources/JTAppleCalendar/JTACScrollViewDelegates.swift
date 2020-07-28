@@ -98,13 +98,13 @@ extension JTACMonthView: UIScrollViewDelegate {
             guard section >= 0, section < calendarLayout.endOfSectionOffsets.count else {setTargetContentOffset(0); return}
             let endOfCurrentSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection] + customInterval
             let endOfPreviousSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection - 1 < 0 ? 0 : theCurrentSection - 1] + customInterval
-            let midPoint = (endOfCurrentSectionOffset + endOfPreviousSectionOffset) / 2
+            var midPoint = (endOfCurrentSectionOffset + endOfPreviousSectionOffset) / 2
             let maxSnap = calendarLayout.endOfSectionOffsets[section] + customInterval
             
-            let userPercentage: CGFloat = 10
+            let userPercentage: CGFloat = 15
             let modifiedPercentage = CGFloat((100 - userPercentage) / 100.0)
             
-            let snapForward = midPoint - ((maxSnap - midPoint) * modifiedPercentage)
+            var snapForward = midPoint - ((maxSnap - midPoint) * modifiedPercentage)
             
             scrollDecision(currentScrollDirectionValue: translation,
                            previousScrollDirectionValue: lastMovedScrollDirection,
@@ -112,7 +112,9 @@ extension JTACMonthView: UIScrollViewDelegate {
                             if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
                                 if theCurrentContentOffset > endOfCurrentSectionOffset, calendarLayout.endOfSectionOffsets.count > theCurrentSection + 1 {
                                     let endOfNextSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection + 1] + customInterval
-                                    if directionVelocity > 0 {
+                                    midPoint = (endOfNextSectionOffset + endOfCurrentSectionOffset) / 2
+                                    snapForward = midPoint - ((endOfNextSectionOffset - midPoint) * modifiedPercentage)
+                                    if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
                                         decelerationRate = .fast
                                         setTargetContentOffset(endOfNextSectionOffset)
                                     } else {
@@ -120,6 +122,7 @@ extension JTACMonthView: UIScrollViewDelegate {
                                         setTargetContentOffset(endOfCurrentSectionOffset)
                                     }
                                 } else {
+                                    decelerationRate = .fast
                                     setTargetContentOffset(endOfCurrentSectionOffset)
                                 }
                             } else {
