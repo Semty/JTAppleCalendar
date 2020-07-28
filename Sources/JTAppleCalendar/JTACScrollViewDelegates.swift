@@ -110,10 +110,15 @@ extension JTACMonthView: UIScrollViewDelegate {
                            previousScrollDirectionValue: lastMovedScrollDirection,
                            forward: {
                             if theCurrentContentOffset >= snapForward || directionVelocity > 0 {
-                                decelerationRate = .fast
                                 if theCurrentContentOffset > endOfCurrentSectionOffset, calendarLayout.endOfSectionOffsets.count > theCurrentSection + 1 {
-                                    let endOfNextSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection + 1]
-                                    setTargetContentOffset(endOfNextSectionOffset + customInterval)
+                                    let endOfNextSectionOffset = calendarLayout.endOfSectionOffsets[theCurrentSection + 1] + customInterval
+                                    if directionVelocity > 0 {
+                                        decelerationRate = .fast
+                                        setTargetContentOffset(endOfNextSectionOffset)
+                                    } else {
+                                        decelerationRate = .normal
+                                        setTargetContentOffset(endOfCurrentSectionOffset)
+                                    }
                                 } else {
                                     setTargetContentOffset(endOfCurrentSectionOffset)
                                 }
@@ -123,12 +128,22 @@ extension JTACMonthView: UIScrollViewDelegate {
                             }
             },
                            backward: {
-                            if theCurrentContentOffset <= snapForward || directionVelocity < 0 || theCurrentContentOffset < endOfCurrentSectionOffset {
+                            if theCurrentContentOffset <= snapForward || directionVelocity < 0 {
                                 decelerationRate = .fast
                                 setTargetContentOffset(endOfPreviousSectionOffset)
                             } else {
-                                decelerationRate = .normal
-                                setTargetContentOffset(endOfCurrentSectionOffset)
+                                if theCurrentContentOffset < endOfCurrentSectionOffset {
+                                    if directionVelocity < 0 {
+                                        decelerationRate = .fast
+                                        setTargetContentOffset(endOfPreviousSectionOffset)
+                                    } else {
+                                        decelerationRate = .normal
+                                        setTargetContentOffset(endOfCurrentSectionOffset)
+                                    }
+                                } else {
+                                    decelerationRate = .normal
+                                    setTargetContentOffset(endOfCurrentSectionOffset)
+                                }
                             }
             })
         case let .nonStopToCell(withResistance: resistance), let .nonStopToSection(withResistance: resistance):
