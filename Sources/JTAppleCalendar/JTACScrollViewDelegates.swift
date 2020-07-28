@@ -123,7 +123,7 @@ extension JTACMonthView: UIScrollViewDelegate {
                             }
             },
                            backward: {
-                            if theCurrentContentOffset <= snapForward || directionVelocity < 0 {
+                            if theCurrentContentOffset <= snapForward || directionVelocity < 0 || theCurrentContentOffset < endOfCurrentSectionOffset {
                                 decelerationRate = .fast
                                 setTargetContentOffset(endOfPreviousSectionOffset)
                             } else {
