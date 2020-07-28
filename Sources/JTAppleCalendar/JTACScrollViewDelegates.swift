@@ -101,7 +101,7 @@ extension JTACMonthView: UIScrollViewDelegate {
             var midPoint = (endOfCurrentSectionOffset + endOfPreviousSectionOffset) / 2
             let maxSnap = calendarLayout.endOfSectionOffsets[section] + customInterval
             
-            let userPercentage: CGFloat = 15
+            let userPercentage: CGFloat = 20
             let modifiedPercentage = CGFloat((100 - userPercentage) / 100.0)
             
             var snapForward = midPoint - ((maxSnap - midPoint) * modifiedPercentage)
