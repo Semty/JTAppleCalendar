@@ -58,16 +58,28 @@ extension JTACMonthView {
     /// - Parameter: date Date of the cell you want to find
     /// - returns:
     ///     - CellState: The state of the found cell
-    public func cellStatus(for date: Date) -> CellState? {
-        if !calendarLayoutIsLoaded || isReloadDataInProgress { return nil }
-        // validate the path
-        let paths = pathsFromDates([date])
-        // Jt101 change this function to also return
-        // information like the dateInfoFromPath function
-        if paths.isEmpty { return nil }
-        let cell = cellForItem(at: paths[0]) as? JTACDayCell
-        let stateOfCell = cellStateFromIndexPath(paths[0], cell: cell)
-        return stateOfCell
+    public func cellStatusUnsafe(for date: Date, completion: @escaping (CellState?) -> Void) {
+        calendarLayoutIsLoaded { [weak self] loaded in
+            guard let self = self else {
+                completion(nil)
+                return
+            }
+            if !loaded || self.isReloadDataInProgress {
+                completion(nil)
+                return
+            }
+            // validate the path
+            let paths = self.pathsFromDates([date])
+            // Jt101 change this function to also return
+            // information like the dateInfoFromPath function
+            if paths.isEmpty {
+                completion(nil)
+                return
+            }
+            let cell = self.cellForItem(at: paths[0]) as? JTACDayCell
+            let stateOfCell = self.cellStateFromIndexPath(paths[0], cell: cell)
+            completion(stateOfCell)
+        }
     }
     
     /// Returns the cell status for a given date
@@ -75,14 +87,22 @@ extension JTACMonthView {
     /// - returns:
     ///     - CellState: The state of the found cell
     public func cellStatus(for date: Date, completionHandler: @escaping (_ cellStatus: CellState?) ->()) {
-        if !calendarLayoutIsLoaded || isReloadDataInProgress {
-            addToDelayedHandlers {[unowned self] in
-                self.cellStatus(for: date, completionHandler: completionHandler)
+        calendarLayoutIsLoaded { [weak self] loaded in
+            guard let self = self else {
+                completionHandler(nil)
+                return
             }
-            return
+            
+            if !loaded || self.isReloadDataInProgress {
+                self.addToDelayedHandlers { [weak self] in
+                    self?.cellStatus(for: date, completionHandler: completionHandler)
+                }
+                return
+            }
+            self.cellStatusUnsafe(for: date) { retval in
+                completionHandler(retval)
+            }
         }
-        let retval = cellStatus(for: date)
-        completionHandler(retval)
     }
     
     func addToDelayedHandlers(function: @escaping ()->()) {
@@ -229,8 +249,8 @@ extension JTACMonthView {
     public func reloadData(withAnchor date: Date? = nil, completionHandler: (() -> Void)? = nil) {
         if isReloadDataInProgress { return }
         if isScrollInProgress {
-            scrollDelayedExecutionClosure.append {[unowned self] in
-                self.reloadData(completionHandler: completionHandler)
+            scrollDelayedExecutionClosure.append { [weak self] in
+                self?.reloadData(completionHandler: completionHandler)
             }
             return
         }
@@ -239,30 +259,47 @@ extension JTACMonthView {
         anchorDate = date
         
         let selectedDates = self.selectedDates
-        let data = reloadDelegateDataSource()
-        if data.shouldReload {
-            calendarViewLayout.clearCache()
-            setupMonthInfoAndMap(with: data.configParameters)
-            selectedCellData = [:]
-        }
-
-        // Restore the selected index paths if dates were already selected.
-        if !selectedDates.isEmpty {
-            calendarViewLayout.delayedExecutionClosure.append {[weak self] in
-                guard let _self = self else { return}
-                _self.isReloadDataInProgress = false
-                _self.selectDates(selectedDates, triggerSelectionDelegate: false, keepSelectionIfMultiSelectionAllowed: true)
+        
+        if Thread.isMainThread {
+            let data = reloadDelegateDataSource()
+            if data.shouldReload {
+                calendarViewLayout.clearCache()
+                setupMonthInfoAndMap(with: data.configParameters)
+                selectedCellData = [:]
+            }
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                let data = self.reloadDelegateDataSource()
+                if data.shouldReload {
+                    self.calendarViewLayout.clearCache()
+                    self.setupMonthInfoAndMap(with: data.configParameters)
+                    self.selectedCellData = [:]
+                }
             }
         }
 
-        // Add calendar reload completion 
-        calendarViewLayout.delayedExecutionClosure.append {[weak self] in
-            guard let _self = self else { return }
-            _self.isReloadDataInProgress = false
-            completionHandler?()
-            if !_self.generalDelayedExecutionClosure.isEmpty { _self.executeDelayedTasks(.general) }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Restore the selected index paths if dates were already selected.
+            if !selectedDates.isEmpty {
+                self.calendarViewLayout.delayedExecutionClosure.append { [weak self] in
+                    guard let _self = self else { return}
+                    _self.isReloadDataInProgress = false
+                    _self.selectDates(selectedDates, triggerSelectionDelegate: false, keepSelectionIfMultiSelectionAllowed: true)
+                }
+            }
+
+            // Add calendar reload completion
+            self.calendarViewLayout.delayedExecutionClosure.append { [weak self] in
+                guard let _self = self else { return }
+                _self.isReloadDataInProgress = false
+                completionHandler?()
+                if !_self.generalDelayedExecutionClosure.isEmpty { _self.executeDelayedTasks(.general) }
+            }
+            self.calendarViewLayout.reloadWasTriggered = true
         }
-        calendarViewLayout.reloadWasTriggered = true
+        
         DispatchQueue.main.async {
             super.reloadData()
         }
@@ -330,78 +367,82 @@ extension JTACMonthView {
     ///    Selecting those 4 dates again would give U | S | U | U. With KeepSelection, this becomes S | S | S | S
     public func selectDates(_ dates: [Date], triggerSelectionDelegate: Bool = true, keepSelectionIfMultiSelectionAllowed: Bool = false) {
         if dates.isEmpty { return }
-        if (!calendarLayoutIsLoaded || isReloadDataInProgress) {
-            // If the calendar is not yet fully loaded.
-            // Add the task to the delayed queue
-            generalDelayedExecutionClosure.append {[unowned self] in
-                self.selectDates(dates,
-                                 triggerSelectionDelegate: triggerSelectionDelegate,
-                                 keepSelectionIfMultiSelectionAllowed: keepSelectionIfMultiSelectionAllowed)
-            }
-            return
-        }
-        var allIndexPathsToReload: Set<IndexPath> = []
-        var validDatesToSelect = dates
-        // If user is trying to select multiple dates with
-        // multiselection disabled, then only select the last object
-        if !allowsMultipleSelection, let dateToSelect = dates.last {
-            validDatesToSelect = [dateToSelect]
-        }
-        
-        for date in validDatesToSelect {
-            let date = calendar.startOfDay(for: date)
-            let components = calendar.dateComponents([.year, .month, .day], from: date)
-            let firstDayOfDate = calendar.date(from: components)!
-            
-            // If the date is not within valid boundaries, then exit
-            if !(firstDayOfDate >= startOfMonthCache! && firstDayOfDate <= endOfMonthCache!) { continue }
-            
-            let pathFromDates = pathsFromDates([date])
-            // If the date path youre searching for, doesnt exist, return
-            if pathFromDates.isEmpty { continue }
-            let sectionIndexPath = pathFromDates[0]
-            
-            // Remove old selections
-            if allowsMultipleSelection {
-                // If multiple selection is on. Multiple selection behaves differently to singleselection.
-                // It behaves like a toggle. unless keepSelectionIfMultiSelectionAllowed is true.
-                // If user wants to force selection if multiselection is enabled, then removed the selected dates from generated dates
-                if keepSelectionIfMultiSelectionAllowed, selectedDates.contains(date) {
-                    guard
-                        let selectedIndexPaths = indexPathsForSelectedItems,
-                        selectedIndexPaths.contains(sectionIndexPath) else {
-                            // Select the item if it is not selected (not included in indexPathsForSelectedItems).
-                            // This makes the cell to be in selected state thus, if selected physically, will call the didDeselect function
-                            programaticallySelectItem(at: sectionIndexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
-                            continue
-                    }
-                    // Just add it to be reloaded, if it is already selected
-                    allIndexPathsToReload.insert(sectionIndexPath)
-                } else {
-                    if selectedCellData[sectionIndexPath] != nil { // If this cell is already selected, then deselect it
-                        programaticallyDeselectItem(at: sectionIndexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
-                    } else { // If this cell is unselected, then select it
-                        programaticallySelectItem(at: sectionIndexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
-                    }
+        calendarLayoutIsLoaded { [weak self] loaded in
+            guard let self = self else { return }
+            if !loaded || self.isReloadDataInProgress {
+                // If the calendar is not yet fully loaded.
+                // Add the task to the delayed queue
+                self.generalDelayedExecutionClosure.append { [weak self] in
+                    self?.selectDates(dates,
+                                      triggerSelectionDelegate: triggerSelectionDelegate,
+                                      keepSelectionIfMultiSelectionAllowed: keepSelectionIfMultiSelectionAllowed)
                 }
-            } else {
-                // If single selection is ON
-                let selectedIndexPaths = selectedCellData
+                return
+            }
+            var allIndexPathsToReload: Set<IndexPath> = []
+            var validDatesToSelect = dates
+            // If user is trying to select multiple dates with
+            // multiselection disabled, then only select the last object
+            if !self.allowsMultipleSelection, let dateToSelect = dates.last {
+                validDatesToSelect = [dateToSelect]
+            }
+            
+            for date in validDatesToSelect {
+                let date = self.calendar.startOfDay(for: date)
+                let components = self.calendar.dateComponents([.year, .month, .day], from: date)
+                let firstDayOfDate = self.calendar.date(from: components)!
                 
-                if let cellData = (selectedIndexPaths.filter { $0.key != sectionIndexPath  }.first) {
-                    programaticallyDeselectItem(at: cellData.value.indexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
+                // If the date is not within valid boundaries, then exit
+                if !(firstDayOfDate >= self.startOfMonthCache! && firstDayOfDate <= self.endOfMonthCache!) { continue }
+                
+                let pathFromDates = self.pathsFromDates([date])
+                // If the date path youre searching for, doesnt exist, return
+                if pathFromDates.isEmpty { continue }
+                let sectionIndexPath = pathFromDates[0]
+                
+                // Remove old selections
+                if self.allowsMultipleSelection {
+                    // If multiple selection is on. Multiple selection behaves differently to singleselection.
+                    // It behaves like a toggle. unless keepSelectionIfMultiSelectionAllowed is true.
+                    // If user wants to force selection if multiselection is enabled, then removed the selected dates from generated dates
+                    if keepSelectionIfMultiSelectionAllowed, self.selectedDates.contains(date) {
+                        guard
+                            let selectedIndexPaths = self.indexPathsForSelectedItems,
+                            selectedIndexPaths.contains(sectionIndexPath) else {
+                                // Select the item if it is not selected (not included in indexPathsForSelectedItems).
+                                // This makes the cell to be in selected state thus, if selected physically, will call the didDeselect function
+                            self.programaticallySelectItem(at: sectionIndexPath,
+                                                           shouldTriggerSelectionDelegate: triggerSelectionDelegate)
+                                continue
+                        }
+                        // Just add it to be reloaded, if it is already selected
+                        allIndexPathsToReload.insert(sectionIndexPath)
+                    } else {
+                        if self.selectedCellData[sectionIndexPath] != nil { // If this cell is already selected, then deselect it
+                            self.programaticallyDeselectItem(at: sectionIndexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
+                        } else { // If this cell is unselected, then select it
+                            self.programaticallySelectItem(at: sectionIndexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
+                        }
+                    }
+                } else {
+                    // If single selection is ON
+                    let selectedIndexPaths = self.selectedCellData
+                    
+                    if let cellData = (selectedIndexPaths.filter { $0.key != sectionIndexPath  }.first) {
+                        self.programaticallyDeselectItem(at: cellData.value.indexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
+                    }
+                    // Add new selections Must be added here. If added in delegate didSelectItemAtIndexPath
+                    self.programaticallySelectItem(at: sectionIndexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
                 }
-                // Add new selections Must be added here. If added in delegate didSelectItemAtIndexPath
-                programaticallySelectItem(at: sectionIndexPath, shouldTriggerSelectionDelegate: triggerSelectionDelegate)
             }
-        }
-        // If triggering was false, although the selectDelegates weren't
-        // called, we do want the cell refreshed. Reload to call itemAtIndexPath
-        if !triggerSelectionDelegate && !allIndexPathsToReload.isEmpty {
-            // Because sometimes if not on main thread, it will not get the
-            // visible cells in the following function
-            DispatchQueue.main.async {
-                self.batchReloadIndexPaths(Array(allIndexPathsToReload))
+            // If triggering was false, although the selectDelegates weren't
+            // called, we do want the cell refreshed. Reload to call itemAtIndexPath
+            if !triggerSelectionDelegate && !allIndexPathsToReload.isEmpty {
+                // Because sometimes if not on main thread, it will not get the
+                // visible cells in the following function
+                DispatchQueue.main.async {
+                    self.batchReloadIndexPaths(Array(allIndexPathsToReload))
+                }
             }
         }
     }
@@ -428,95 +469,99 @@ extension JTACMonthView {
                                 animateScroll: Bool = true,
                                 extraAddedOffset: CGFloat = 0,
                                 completionHandler: (() -> Void)? = nil) {
-        if functionIsUnsafeSafeToRun {
-            addToDelayedHandlers {[unowned self] in
-                self.scrollToSegment(destination,
-                                     triggerScrollToDateDelegate: triggerScrollToDateDelegate,
-                                     animateScroll: animateScroll,
-                                     extraAddedOffset: extraAddedOffset,
-                                     completionHandler: completionHandler)
-            }
-            return
-        }
-
-        let fixedScrollSize: CGFloat
-        var xOffset: CGFloat = 0
-        var yOffset: CGFloat = 0
-        
-        switch scrollDirection {
-        case .horizontal:
-            if calendarViewLayout.thereAreHeaders || _cachedConfiguration.generateOutDates == .tillEndOfGrid {
-                fixedScrollSize = calendarViewLayout.sizeOfContentForSection(0)
-            } else {
-                fixedScrollSize = frame.width
-            }
+        functionIsUnsafeSafeToRun { [weak self] unsafe in
+            guard let self = self else { return }
             
-            var section = contentOffset.x / fixedScrollSize
-            let roundedSection = round(section)
-            if abs(roundedSection - section) < errorDelta { section = roundedSection }
-            section = CGFloat(Int(section))
-            
-            xOffset = (fixedScrollSize * section)
-            switch destination {
-            case .next:
-                xOffset += fixedScrollSize
-            case .previous:
-                xOffset -= fixedScrollSize
-            case .end:
-                xOffset = contentSize.width - frame.width
-            case .start:
-                xOffset = 0
-            }
-            
-            if xOffset <= 0 {
-                xOffset = 0
-            } else if xOffset >= contentSize.width - frame.width {
-                xOffset = contentSize.width - frame.width
-            }
-        case .vertical:
-            fallthrough
-        default:
-            guard let currentSection = currentSection() else { return }
-            if (destination == .next && currentSection + 1 >= numberOfSections(in: self)) ||
-                destination == .previous && currentSection - 1 < 0 ||
-                numberOfSections(in: self) < 0 {
+            if unsafe {
+                self.addToDelayedHandlers { [weak self] in
+                    self?.scrollToSegment(destination,
+                                          triggerScrollToDateDelegate: triggerScrollToDateDelegate,
+                                          animateScroll: animateScroll,
+                                          extraAddedOffset: extraAddedOffset,
+                                          completionHandler: completionHandler)
+                }
                 return
             }
             
-            if calendarViewLayout.thereAreHeaders {
+            let fixedScrollSize: CGFloat
+            var xOffset: CGFloat = 0
+            var yOffset: CGFloat = 0
+            
+            switch self.scrollDirection {
+            case .horizontal:
+                if self.calendarViewLayout.thereAreHeaders || self._cachedConfiguration.generateOutDates == .tillEndOfGrid {
+                    fixedScrollSize = self.calendarViewLayout.sizeOfContentForSection(0)
+                } else {
+                    fixedScrollSize = self.frame.width
+                }
                 
+                var section = self.contentOffset.x / fixedScrollSize
+                let roundedSection = round(section)
+                if abs(roundedSection - section) < errorDelta { section = roundedSection }
+                section = CGFloat(Int(section))
+                
+                xOffset = (fixedScrollSize * section)
                 switch destination {
                 case .next:
-                    scrollToHeaderInSection(currentSection + 1, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
+                    xOffset += fixedScrollSize
                 case .previous:
-                    scrollToHeaderInSection(currentSection - 1, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
-                case .start:
-                    scrollToHeaderInSection(0, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
+                    xOffset -= fixedScrollSize
                 case .end:
-                    scrollToHeaderInSection(numberOfSections(in: self) - 1, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
+                    xOffset = self.contentSize.width - self.frame.width
+                case .start:
+                    xOffset = 0
                 }
-                return
-            } else {
-                switch destination {
-                case .next: yOffset = calendarViewLayout.cachedValue(for: 0, section: currentSection + 1)?.3 ?? contentSize.height // Set to max on nil
-                case .end: yOffset = contentSize.height // Set to max
-                case .previous: yOffset = calendarViewLayout.cachedValue(for: 0, section: currentSection - 1)?.3 ?? 0 // Set min on nil
-                case .start: yOffset = 0 // Set to min
+                
+                if xOffset <= 0 {
+                    xOffset = 0
+                } else if xOffset >= self.contentSize.width - self.frame.width {
+                    xOffset = self.contentSize.width - self.frame.width
+                }
+            case .vertical:
+                fallthrough
+            default:
+                guard let currentSection = self.currentSection() else { return }
+                if (destination == .next && currentSection + 1 >= self.numberOfSections(in: self)) ||
+                    destination == .previous && currentSection - 1 < 0 ||
+                    self.numberOfSections(in: self) < 0 {
+                    return
+                }
+                
+                if self.calendarViewLayout.thereAreHeaders {
+                    
+                    switch destination {
+                    case .next:
+                        self.scrollToHeaderInSection(currentSection + 1, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
+                    case .previous:
+                        self.scrollToHeaderInSection(currentSection - 1, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
+                    case .start:
+                        self.scrollToHeaderInSection(0, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
+                    case .end:
+                        self.scrollToHeaderInSection(self.numberOfSections(in: self) - 1, extraAddedOffset: extraAddedOffset, completionHandler: completionHandler)
+                    }
+                    return
+                } else {
+                    switch destination {
+                    case .next: yOffset = self.calendarViewLayout.cachedValue(for: 0, section: currentSection + 1)?.3 ?? self.contentSize.height // Set to max on nil
+                    case .end: yOffset = self.contentSize.height // Set to max
+                    case .previous: yOffset = self.calendarViewLayout.cachedValue(for: 0, section: currentSection - 1)?.3 ?? 0 // Set min on nil
+                    case .start: yOffset = 0 // Set to min
+                    }
+                }
+                
+                if yOffset <= 0 {
+                    yOffset = 0
+                } else if yOffset >= self.contentSize.height - self.frame.height {
+                    yOffset = self.contentSize.height - self.frame.height
                 }
             }
             
-            if yOffset <= 0 {
-                yOffset = 0
-            } else if yOffset >= contentSize.height - frame.height {
-                yOffset = contentSize.height - frame.height
-            }
+            self.scrollTo(point: CGPoint(x: xOffset, y: yOffset),
+                          triggerScrollToDateDelegate: triggerScrollToDateDelegate,
+                          isAnimationEnabled: animateScroll,
+                          extraAddedOffset: extraAddedOffset,
+                          completionHandler: completionHandler)
         }
-        
-        scrollTo(point: CGPoint(x: xOffset, y: yOffset),
-                 triggerScrollToDateDelegate: triggerScrollToDateDelegate,
-                 isAnimationEnabled: animateScroll,
-                 extraAddedOffset: extraAddedOffset,
-                 completionHandler: completionHandler)
     }
     
     /// Scrolls the calendar view to the start of a section view containing a specified date.
@@ -534,41 +579,45 @@ extension JTACMonthView {
                              completionHandler: (() -> Void)? = nil) {
         
         // Ensure scrolling to date is safe to run
-        if functionIsUnsafeSafeToRun {
-            if !animateScroll  { anchorDate = date} // Gets rid of visible scrolling when calendar starts
-            addToDelayedHandlers {[unowned self] in
-                self.scrollToDate(date,
-                                  triggerScrollToDateDelegate: triggerScrollToDateDelegate,
-                                  animateScroll: animateScroll,
-                                  extraAddedOffset: extraAddedOffset,
-                                  completionHandler: completionHandler)
+        functionIsUnsafeSafeToRun { [weak self] unsafe in
+            guard let self = self else { return }
+            
+            if unsafe {
+                if !animateScroll  { self.anchorDate = date} // Gets rid of visible scrolling when calendar starts
+                self.addToDelayedHandlers { [weak self] in
+                    self?.scrollToDate(date,
+                                       triggerScrollToDateDelegate: triggerScrollToDateDelegate,
+                                       animateScroll: animateScroll,
+                                       extraAddedOffset: extraAddedOffset,
+                                       completionHandler: completionHandler)
+                }
+                return
             }
-            return
+            
+            // Set triggereing of delegate on scroll
+            self.triggerScrollToDateDelegate = triggerScrollToDateDelegate
+            
+            // Ensure date is within valid boundary
+            let components = self.calendar.dateComponents([.year, .month, .day], from: date)
+            let firstDayOfDate = self.calendar.date(from: components)!
+            if !((firstDayOfDate >= self.startOfMonthCache!) && (firstDayOfDate <= self.endOfMonthCache!)) { return }
+            
+            // Get valid indexPath of date to scroll to
+            let retrievedPathsFromDates = self.pathsFromDates([date])
+            if retrievedPathsFromDates.isEmpty { return }
+            let sectionIndexPath = self.pathsFromDates([date])[0]
+            
+            guard let point = self.targetPointForItemAt(indexPath: sectionIndexPath) else {
+                assert(false, "Could not determine CGPoint. This is an error. contact developer on github. In production, there will not be a crash, but scrolling will not occur")
+                return
+            }
+            
+            self.scrollTo(point: point,
+                          triggerScrollToDateDelegate: triggerScrollToDateDelegate,
+                          isAnimationEnabled: animateScroll,
+                          extraAddedOffset: extraAddedOffset,
+                          completionHandler: completionHandler)
         }
-        
-        // Set triggereing of delegate on scroll
-        self.triggerScrollToDateDelegate = triggerScrollToDateDelegate
-        
-        // Ensure date is within valid boundary
-        let components = calendar.dateComponents([.year, .month, .day], from: date)
-        let firstDayOfDate = calendar.date(from: components)!
-        if !((firstDayOfDate >= startOfMonthCache!) && (firstDayOfDate <= endOfMonthCache!)) { return }
-        
-        // Get valid indexPath of date to scroll to
-        let retrievedPathsFromDates = pathsFromDates([date])
-        if retrievedPathsFromDates.isEmpty { return }
-        let sectionIndexPath = pathsFromDates([date])[0]
-        
-        guard let point = targetPointForItemAt(indexPath: sectionIndexPath) else {
-            assert(false, "Could not determine CGPoint. This is an error. contact developer on github. In production, there will not be a crash, but scrolling will not occur")
-            return
-        }
-
-        scrollTo(point: point,
-                 triggerScrollToDateDelegate: triggerScrollToDateDelegate,
-                 isAnimationEnabled: animateScroll,
-                 extraAddedOffset: extraAddedOffset,
-                 completionHandler: completionHandler)
     }
     
     /// Scrolls the calendar view to the start of a section view header.
@@ -580,46 +629,55 @@ extension JTACMonthView {
                                       withAnimation animation: Bool = false,
                                       extraAddedOffset: CGFloat = 0,
                                       completionHandler: (() -> Void)? = nil) {
-        if functionIsUnsafeSafeToRun {
-            if !animation  { anchorDate = date}
-            addToDelayedHandlers { [unowned self] in
-                self.scrollToHeaderForDate(date,
-                                           triggerScrollToDateDelegate: triggerScrollToDateDelegate,
-                                           withAnimation: animation,
-                                           extraAddedOffset: extraAddedOffset,
-                                           completionHandler: completionHandler)
+        functionIsUnsafeSafeToRun { [weak self] unsafe in
+            guard let self = self else { return }
+            
+            if unsafe {
+                if !animation  { self.anchorDate = date}
+                self.addToDelayedHandlers { [weak self] in
+                    self?.scrollToHeaderForDate(date,
+                                                triggerScrollToDateDelegate: triggerScrollToDateDelegate,
+                                                withAnimation: animation,
+                                                extraAddedOffset: extraAddedOffset,
+                                                completionHandler: completionHandler)
+                }
+                return
             }
-            return
+            let path = self.pathsFromDates([date])
+            // Return if date was incalid and no path was returned
+            if path.isEmpty { return }
+            self.scrollToHeaderInSection(
+                path[0].section,
+                triggerScrollToDateDelegate: triggerScrollToDateDelegate,
+                withAnimation: animation,
+                extraAddedOffset: extraAddedOffset,
+                completionHandler: completionHandler
+            )
         }
-        let path = pathsFromDates([date])
-        // Return if date was incalid and no path was returned
-        if path.isEmpty { return }
-        scrollToHeaderInSection(
-            path[0].section,
-            triggerScrollToDateDelegate: triggerScrollToDateDelegate,
-            withAnimation: animation,
-            extraAddedOffset: extraAddedOffset,
-            completionHandler: completionHandler
-        )
     }
     
     /// Returns the visible dates of the calendar.
     /// - returns:
     ///     - DateSegmentInfo
-    public func visibleDates()-> DateSegmentInfo {
-        return datesAtCurrentOffset()
+    public func visibleDatesUnsafe(completion: @escaping (DateSegmentInfo) -> Void) {
+        datesAtCurrentOffset(completion: completion)
     }
     
     /// Returns the visible dates of the calendar.
     /// - returns:
     ///     - DateSegmentInfo
     public func visibleDates(_ completionHandler: @escaping (_ dateSegmentInfo: DateSegmentInfo) ->()) {
-        if functionIsUnsafeSafeToRun {
-            addToDelayedHandlers { [unowned self] in self.visibleDates(completionHandler) }
-            return
+        functionIsUnsafeSafeToRun { [weak self] unsafe in
+            guard let self = self else { return }
+            
+            if unsafe {
+                self.addToDelayedHandlers { [weak self] in self?.visibleDates(completionHandler) }
+                return
+            }
+            self.visibleDatesUnsafe { retval in
+                completionHandler(retval)
+            }
         }
-        let retval = visibleDates()
-        completionHandler(retval)
     }
     
     /// Retrieves the current section

@@ -28,8 +28,12 @@ extension JTACMonthView {
     /// Lays out subviews.
     override open func layoutSubviews() {
         super.layoutSubviews()
-        if !generalDelayedExecutionClosure.isEmpty, calendarLayoutIsLoaded {
-            executeDelayedTasks(.general)
+        if !generalDelayedExecutionClosure.isEmpty {
+            calendarLayoutIsLoaded { [weak self] loaded in
+                if loaded {
+                    self?.executeDelayedTasks(.general)
+                }
+            }
         }
     }
     

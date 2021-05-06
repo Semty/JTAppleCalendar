@@ -197,8 +197,10 @@ extension JTACMonthView: UIScrollViewDelegate {
         }
         
         let futureScrollPoint = CGPoint(x: targetContentOffset.pointee.x, y: targetContentOffset.pointee.y)
-        let dateSegmentInfo = datesAtCurrentOffset(futureScrollPoint)
-        calendarDelegate?.calendar(self, willScrollToDateSegmentWith: dateSegmentInfo)
+        datesAtCurrentOffset(futureScrollPoint) { [weak self] dateSegmentInfo in
+            guard let self = self else { return }
+            self.calendarDelegate?.calendar(self, willScrollToDateSegmentWith: dateSegmentInfo)
+        }
 
         self.lastMovedScrollDirection = translation
         

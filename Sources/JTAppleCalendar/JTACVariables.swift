@@ -85,11 +85,36 @@ extension JTACMonthView {
         return layout
     }
     
-    var functionIsUnsafeSafeToRun: Bool {
-        return !calendarLayoutIsLoaded || isScrollInProgress || isReloadDataInProgress
+//    var functionIsUnsafeSafeToRun: Bool {
+//        return !calendarLayoutIsLoaded || isScrollInProgress || isReloadDataInProgress
+//    }
+    
+    func functionIsUnsafeSafeToRun(completion: @escaping (Bool) -> Void) {
+        calendarLayoutIsLoaded { [weak self] loaded in
+            guard let self = self else {
+                completion(false)
+                return
+            }
+            completion(!loaded || self.isScrollInProgress || self.isReloadDataInProgress)
+        }
     }
     
-    var calendarLayoutIsLoaded: Bool { return calendarViewLayout.isCalendarLayoutLoaded }
+    func calendarLayoutIsLoaded(completion: @escaping (Bool) -> Void) {
+        if Thread.isMainThread {
+            let loaded = self.calendarViewLayout.isCalendarLayoutLoaded
+            completion(loaded)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    completion(false)
+                    return
+                }
+                completion(self.calendarViewLayout.isCalendarLayoutLoaded)
+            }
+        }
+    }
+    
+//    var calendarLayoutIsLoaded: Bool { return calendarViewLayout.isCalendarLayoutLoaded }
     var startDateCache: Date {
         guard let date = _cachedConfiguration?.startDate else {
             assert(false, "Attemped to access startDate when Datasource/delegate is not set yet. Returning todays's date")

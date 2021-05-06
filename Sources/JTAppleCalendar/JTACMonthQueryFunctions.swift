@@ -454,7 +454,7 @@ extension JTACMonthView {
         return (validDate, dateOwner)
     }
     
-    func datesAtCurrentOffset(_ offset: CGPoint? = nil) -> DateSegmentInfo {
+    func datesAtCurrentOffset(_ offset: CGPoint? = nil, completion: @escaping (DateSegmentInfo) -> Void) {
         
         let rect: CGRect?
         if let offset = offset {
@@ -465,10 +465,15 @@ extension JTACMonthView {
         
         let emptySegment = DateSegmentInfo(indates: [], monthDates: [], outdates: [])
         
-        guard calendarLayoutIsLoaded else { return emptySegment }
-        
-        let cellAttributes = calendarViewLayout.elementsAtRect(excludeHeaders: true, from: rect)
-        let indexPaths: [IndexPath] = cellAttributes.map { $0.indexPath }.sorted()
-        return dateSegmentInfoFrom(visible: indexPaths)
+        calendarLayoutIsLoaded { [weak self] loaded in
+            guard let self = self, loaded else {
+                completion(emptySegment)
+                return
+            }
+            
+            let cellAttributes = self.calendarViewLayout.elementsAtRect(excludeHeaders: true, from: rect)
+            let indexPaths: [IndexPath] = cellAttributes.map { $0.indexPath }.sorted()
+            completion(self.dateSegmentInfoFrom(visible: indexPaths))
+        }
     }
 }

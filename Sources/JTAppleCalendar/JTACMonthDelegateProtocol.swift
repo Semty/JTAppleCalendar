@@ -31,7 +31,6 @@ protocol JTACMonthDelegateProtocol: AnyObject {
     var calendarDataSource: JTACMonthViewDataSource? {get set}
     var cellSize: CGFloat {get set}
     var anchorDate: Date? {get set}
-    var calendarLayoutIsLoaded: Bool {get}
     var minimumInteritemSpacing: CGFloat  {get set}
     var minimumLineSpacing: CGFloat {get set}
     var monthInfo: [Month] {get set}
@@ -42,6 +41,7 @@ protocol JTACMonthDelegateProtocol: AnyObject {
     var requestedContentOffset: CGPoint {get}
     
     // Functions
+    func calendarLayoutIsLoaded(completion: @escaping (Bool) -> Void)
     func pathsFromDates(_ dates: [Date]) -> [IndexPath]
     func sizeOfDecorationView(indexPath: IndexPath) -> CGRect
     func sizesForMonthSection() -> [AnyHashable:CGFloat]
